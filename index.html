@@ -597,6 +597,7 @@ async function uploadFile(file, path){
 let currentRole='admin', currentUser=null, activePanel='';
 let allPatients=[], allDoctors=[], allTests=[], allAssistants=[];
 let reportFileObj=null;
+let _refreshInterval=null;
 
 function sha256(str){return crypto.subtle.digest('SHA-256',new TextEncoder().encode(str)).then(buf=>Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join(''));}
 
