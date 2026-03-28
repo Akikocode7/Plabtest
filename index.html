@@ -681,8 +681,10 @@ function enterApp(){
   av.className=`user-avatar role-${currentUser.role}`;
   document.getElementById('user-label').textContent=currentUser.name;
   buildSidebar();
+  startRealtime();
 }
 function logout(){
+  stopRealtime();
   currentUser=null;allPatients=[];allDoctors=[];allTests=[];allAssistants=[];
   document.getElementById('app').classList.remove('visible');
   document.getElementById('login-screen').style.display='flex';
@@ -774,10 +776,7 @@ async function loadPanel(name){
     if(name==='patients')await loadPatients();
     if(name==='doctors')await loadDoctors();
     if(name==='tests')await loadTests();
-    if(name==='appointments'){
-      await loadAppointments();
-      startRefresh('appointments',loadAppointments,3000);
-    }
+    if(name==='appointments')await loadAppointments();
     if(name==='samples')await loadSamples();
     if(name==='reports')await loadReports();
     if(name==='billing')await loadBilling();
@@ -1064,7 +1063,6 @@ async function saveReport(){
         date,
         file_name:fileName||'',
         file_url:fileUrl||null,
-        file:fileName||'',
         remark:remark||null,
         managed_by:null
       });
@@ -1291,11 +1289,78 @@ function toast(msg,ok=true){
   t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2800);
 }
 
-// ══ AUTO-REFRESH ══
-let _refreshInterval=null;
-function startRefresh(panel,fn,ms=3000){
-  if(_refreshInterval)clearInterval(_refreshInterval);
-  _refreshInterval=setInterval(()=>{if(activePanel===panel)fn();else{clearInterval(_refreshInterval);_refreshInterval=null;}},ms);
+// ══ REALTIME ══
+// Single WebSocket to Supabase Realtime — reloads the active panel
+// instantly whenever any row is inserted/updated/deleted in watched tables
+let _rt=null;
+const _watchTables=['appointments','sample_collection','reports','billing','patients'];
+
+function startRealtime(){
+  if(_rt){try{_rt.close();}catch(e){}_rt=null;}
+  const wsUrl=SUPABASE_URL.replace('https://','wss://').replace('http://','ws://')
+    +'/realtime/v1/websocket?apikey='+SUPABASE_KEY+'&vsn=1.0.0';
+  const ws=new WebSocket(wsUrl);
+  _rt=ws;
+
+  ws.onopen=()=>{
+    // Subscribe to postgres_changes for each watched table
+    _watchTables.forEach((table,i)=>{
+      ws.send(JSON.stringify({
+        topic:'realtime:public:'+table,
+        event:'phx_join',
+        payload:{config:{postgres_changes:[{event:'*',schema:'public',table}]}},
+        ref:String(i+1)
+      }));
+    });
+    // Heartbeat every 25s
+    ws._hb=setInterval(()=>{
+      if(ws.readyState===1)
+        ws.send(JSON.stringify({topic:'phoenix',event:'heartbeat',payload:{},ref:'hb'}));
+    },25000);
+  };
+
+  ws.onmessage=(e)=>{
+    try{
+      const msg=JSON.parse(e.data);
+      // Supabase sends both legacy INSERT and postgres_changes events
+      const isChange=
+        (msg.event==='INSERT'||msg.event==='UPDATE'||msg.event==='DELETE')
+        ||(msg.payload?.data?.type==='INSERT'||msg.payload?.data?.type==='UPDATE'||msg.payload?.data?.type==='DELETE');
+      if(!isChange||!currentUser)return;
+
+      // Map changed table → which panels to reload
+      const topic=msg.topic||'';
+      const tableMap={
+        'appointments':   ['appointments','dashboard','doc-portal','asst-portal','portal'],
+        'sample_collection': ['samples','dashboard','asst-portal'],
+        'reports':        ['reports','portal','doc-portal'],
+        'billing':        ['billing','portal','asst-portal','dashboard'],
+        'patients':       ['patients','dashboard'],
+      };
+      let panels=[];
+      for(const [t,ps] of Object.entries(tableMap)){
+        if(topic.includes(t)){panels=ps;break;}
+      }
+      if(!panels.length)return;
+
+      // If the active panel is one that should refresh, reload it now
+      if(panels.includes(activePanel)){
+        loadPanel(activePanel);
+      }
+    }catch(ex){}
+  };
+
+  ws.onerror=()=>{};
+  ws.onclose=()=>{
+    if(_rt===ws){// only reconnect if this is still the active socket
+      clearInterval(ws._hb);
+      setTimeout(()=>{if(currentUser)startRealtime();},2000);
+    }
+  };
+}
+
+function stopRealtime(){
+  if(_rt){clearInterval(_rt._hb);try{_rt.close();}catch(e){}_rt=null;}
 }
 
 loadConfig();
