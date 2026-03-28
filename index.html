@@ -963,13 +963,36 @@ async function loadSamples(){
   }
   const rows=await sbGet('sample_collection','sample_id,patient_id,test_id,collection_date,status,notes,patients(name),tests(name)',filters,'sample_id.desc');
   const canUpdate=currentRole==='admin';
-  document.getElementById('tbl-samples').innerHTML=rows.length?rows.map(s=>`<tr>
-    <td><span class="badge b-orange">S-${s.sample_id}</span></td>
-    <td>${s.patients?.name||'—'}</td><td>${s.tests?.name||'—'}</td>
-    <td style="color:var(--text3)">${s.collection_date}</td>
-    <td><span class="badge ${s.status==='Collected'||s.status==='Done'?'b-green':s.status==='Processing'?'b-purple':'b-red'}">${s.status}</span></td>
-    <td style="color:var(--text3);font-size:12px;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${s.notes||'—'}</td>
-    <td>${canUpdate&&s.status==='Pending'?`<button class="btn btn-success btn-xs" onclick="updateSample(${s.sample_id},'Collected')">Collect</button>`:canUpdate&&s.status==='Collected'?`<button class="btn btn-success btn-xs" onclick="updateSample(${s.sample_id},'Processing')">Process</button>`:canUpdate&&s.status==='Processing'?`<button class="btn btn-success btn-xs" onclick="updateSample(${s.sample_id},'Done')">Done</button>`:'—'}</td>
+
+  // Group by patient+date+notes (same submission = same notes tag)
+  const groups=[];
+  const seen=new Map();
+  for(const s of rows){
+    const key=s.patient_id+'|'+s.collection_date+'|'+(s.notes||'');
+    if(seen.has(key)){
+      seen.get(key).tests.push(s.tests?.name||'—');
+      seen.get(key)._ids.push(s.sample_id);
+    }else{
+      const g={...s,tests:[s.tests?.name||'—'],_ids:[s.sample_id]};
+      seen.set(key,g);
+      groups.push(g);
+    }
+  }
+
+  const sc=s=>s==='Collected'||s==='Done'?'b-green':s==='Processing'?'b-purple':'b-red';
+  document.getElementById('tbl-samples').innerHTML=groups.length?groups.map(g=>`<tr>
+    <td><span class="badge b-orange">S-${g.sample_id}</span></td>
+    <td>${g.patients?.name||'—'}</td>
+    <td>${g.tests.join(', ')}</td>
+    <td style="color:var(--text3)">${g.collection_date}</td>
+    <td><span class="badge ${sc(g.status)}">${g.status}</span></td>
+    <td style="color:var(--text3);font-size:12px;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${g.notes||'—'}</td>
+    <td style="display:flex;gap:4px;flex-wrap:wrap">
+      ${canUpdate&&g.status==='Pending'   ?`<button class="btn btn-success btn-xs" onclick="updateSampleGroup(${JSON.stringify(g._ids)},'Collected')">Collect</button>`:''}
+      ${canUpdate&&g.status==='Collected' ?`<button class="btn btn-success btn-xs" onclick="updateSampleGroup(${JSON.stringify(g._ids)},'Processing')">Process</button>`:''}
+      ${canUpdate&&g.status==='Processing'?`<button class="btn btn-success btn-xs" onclick="updateSampleGroup(${JSON.stringify(g._ids)},'Done')">Done</button>`:''}
+      ${!canUpdate?'—':''}
+    </td>
   </tr>`).join(''):`<tr class="empty-row"><td colspan="7">No samples</td></tr>`;
 }
 function toggleAllSampleTypes(checked){document.querySelectorAll('input[name="sample-type"]').forEach(c=>c.checked=checked);}
@@ -1003,6 +1026,10 @@ async function saveSample(){
   }catch(e){toast('Could not submit: '+(e.message||'Unknown error'),false);console.error(e);}
 }
 async function updateSample(id,status){await sbPatch('sample_collection',[`sample_id=eq.${id}`],{status});toast('Updated');loadSamples();}
+async function updateSampleGroup(ids,status){
+  await Promise.all(ids.map(id=>sbPatch('sample_collection',[`sample_id=eq.${id}`],{status})));
+  toast('Updated');loadSamples();
+}
 
 // ══ REPORTS — with file upload ══
 function handleReportFile(input){
