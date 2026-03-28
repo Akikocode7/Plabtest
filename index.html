@@ -864,14 +864,14 @@ async function loadAppointments(){
   const sc={Scheduled:'b-blue',Confirmed:'b-purple',Completed:'b-green',Cancelled:'b-red'};
   document.getElementById('tbl-appointments').innerHTML=rows.length?rows.map(a=>{
     const canManage=currentRole==='admin'||(currentRole==='doctor'&&Number(a.doctor_id)===Number(currentUser.id));
-    return `<tr>
+    return `<tr data-appt-id="${a.appointment_id}">
     <td><span class="badge b-blue">A-${a.appointment_id}</span></td>
     <td>${a.patients?.name||'—'}</td><td>${a.doctors?.name||'—'}</td>
     <td style="color:var(--text3)">${a.date}</td>
     <td style="font-family:'DM Mono',monospace">${a.time}</td>
-    <td><span class="badge ${sc[a.status]||'b-blue'}">${a.status}</span></td>
+    <td class="appt-status-cell"><span class="badge ${sc[a.status]||'b-blue'}">${a.status}</span></td>
     <td style="color:var(--text3);font-size:12px;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${a.notes||'—'}</td>
-    <td style="display:flex;gap:4px;flex-wrap:wrap">
+    <td class="appt-action-cell" style="display:flex;gap:4px;flex-wrap:wrap">
       ${a.status==='Scheduled'&&canManage?`<button class="btn btn-success btn-xs" onclick="updateAppt(${a.appointment_id},'Confirmed')">Confirm</button>`:''}
       ${a.status==='Confirmed'&&currentRole==='admin'?`<button class="btn btn-success btn-xs" onclick="updateAppt(${a.appointment_id},'Completed')">Done</button>`:''}
       ${(a.status==='Scheduled'||a.status==='Confirmed')&&canManage?`<button class="btn btn-danger btn-xs" onclick="updateAppt(${a.appointment_id},'Cancelled')">Cancel</button>`:''}
@@ -925,32 +925,30 @@ async function saveAppt(){
 }
 
 async function updateAppt(id,status){
-  // Optimistic: update badge + buttons instantly in the DOM
   const sc={Scheduled:'b-blue',Confirmed:'b-purple',Completed:'b-green',Cancelled:'b-red'};
-  const rows=document.querySelectorAll('#tbl-appointments tr');
-  for(const row of rows){
-    if(row.innerHTML.includes(`updateAppt(${id},`) || row.innerHTML.includes(`A-${id}`)){
-      const badge=row.querySelector('.badge.b-blue,.badge.b-purple,.badge.b-green,.badge.b-red');
-      if(badge){badge.className=`badge ${sc[status]||'b-blue'}`;badge.textContent=status;}
-      const actionCell=row.querySelector('td:last-child');
-      if(actionCell){
-        if(status==='Cancelled'||status==='Completed'){
-          actionCell.innerHTML='—';
-        }else if(status==='Confirmed'){
-          actionCell.innerHTML=`
-            ${currentRole==='admin'?`<button class="btn btn-success btn-xs" onclick="updateAppt(${id},'Completed')">Done</button>`:''}
-            <button class="btn btn-danger btn-xs" onclick="updateAppt(${id},'Cancelled')">Cancel</button>`;
-        }
+  // Find row by data attribute — instant, reliable
+  const row=document.querySelector(`#tbl-appointments tr[data-appt-id="${id}"]`);
+  if(row){
+    // Update status badge instantly
+    const statusCell=row.querySelector('.appt-status-cell');
+    if(statusCell) statusCell.innerHTML=`<span class="badge ${sc[status]||'b-blue'}">${status}</span>`;
+    // Update action buttons instantly
+    const actionCell=row.querySelector('.appt-action-cell');
+    if(actionCell){
+      if(status==='Cancelled'||status==='Completed'){
+        actionCell.innerHTML='—';
+      }else if(status==='Confirmed'){
+        actionCell.innerHTML=
+          (currentRole==='admin'?`<button class="btn btn-success btn-xs" onclick="updateAppt(${id},'Completed')">Done</button> `:'')
+          +`<button class="btn btn-danger btn-xs" onclick="updateAppt(${id},'Cancelled')">Cancel</button>`;
       }
-      break;
     }
   }
-  const statusLabels={Confirmed:'Confirmed ✓',Completed:'Marked complete ✓',Cancelled:'Cancelled'};
-  toast(statusLabels[status]||'Updated');
-  // Persist to DB in background — no await on UI thread
+  const labels={Confirmed:'Confirmed ✓',Completed:'Completed ✓',Cancelled:'Cancelled'};
+  toast(labels[status]||'Updated');
+  // Persist in background
   sbPatch('appointments',[`appointment_id=eq.${id}`],{status})
-    .then(()=>loadAppointments())
-    .catch(e=>{toast('Update failed',false);loadAppointments();console.error(e);});
+    .catch(e=>{toast('Update failed — refreshing',false);loadAppointments();console.error(e);});
 }
 
 // ══ SAMPLES ══
@@ -1027,12 +1025,28 @@ async function loadReports(){
     filters=[`patient_id=in.(${pids.join(',')})`];
   }
   const rows=await sbGet('reports','report_id,patient_id,test_id,date,file_name,file_url,remark,patients(name),tests(name)',filters,'report_id.desc');
-  document.getElementById('tbl-reports').innerHTML=rows.length?rows.map(r=>`<tr>
-    <td><span class="badge b-purple">R-${r.report_id}</span></td>
-    <td>${r.patients?.name||'—'}</td><td>${r.tests?.name||'—'}</td>
-    <td style="color:var(--text3)">${r.date}</td>
-    <td>${r.file_url?`<a href="${r.file_url}" target="_blank" class="report-file-link">📎 ${r.file_name||'View'}</a>`:r.file_name?`<span style="font-family:'DM Mono',monospace;font-size:12px;color:var(--text3)">${r.file_name}</span>`:'—'}</td>
-    <td style="color:var(--text3);max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.remark||'—'}</td>
+
+  // Group rows by file_url+patient_id+date so multi-test uploads show as one row
+  const groups=[];
+  const seen=new Map();
+  for(const r of rows){
+    const key=(r.file_url||r.file_name||r.report_id)+'|'+r.patient_id+'|'+r.date;
+    if(seen.has(key)){
+      seen.get(key).tests.push(r.tests?.name||'—');
+    }else{
+      const g={...r,tests:[r.tests?.name||'—'],_key:key};
+      seen.set(key,g);
+      groups.push(g);
+    }
+  }
+
+  document.getElementById('tbl-reports').innerHTML=groups.length?groups.map(g=>`<tr>
+    <td><span class="badge b-purple">R-${g.report_id}</span></td>
+    <td>${g.patients?.name||'—'}</td>
+    <td>${g.tests.join(', ')}</td>
+    <td style="color:var(--text3)">${g.date}</td>
+    <td>${g.file_url?`<a href="${g.file_url}" target="_blank" class="report-file-link">📎 ${g.file_name||'View'}</a>`:g.file_name?`<span style="font-family:'DM Mono',monospace;font-size:12px;color:var(--text3)">${g.file_name}</span>`:'—'}</td>
+    <td style="color:var(--text3);max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${g.remark||'—'}</td>
   </tr>`).join(''):`<tr class="empty-row"><td colspan="6">No reports</td></tr>`;
 }
 
@@ -1167,7 +1181,16 @@ async function loadPatientPortal(){
     </div>
     <div class="portal-card"><h3>📋 My Reports</h3>
       <div class="table-wrap"><table><thead><tr><th>Test</th><th>Date</th><th>File</th><th>Remarks</th></tr></thead>
-      <tbody>${reports.length?reports.map(r=>`<tr><td>${r.tests?.name||'—'}</td><td>${r.date}</td><td>${r.file_url?`<a href="${r.file_url}" target="_blank" class="report-file-link">📎 ${r.file_name||'View'}</a>`:r.file_name||'—'}</td><td style="color:var(--text3)">${r.remark||'—'}</td></tr>`).join(''):'<tr class="empty-row"><td colspan="4">No reports yet</td></tr>'}</tbody>
+      <tbody>${(()=>{
+        if(!reports.length)return '<tr class="empty-row"><td colspan="4">No reports yet</td></tr>';
+        const seen=new Map(),grps=[];
+        for(const r of reports){
+          const k=(r.file_url||r.file_name||r.report_id)+'|'+r.date;
+          if(seen.has(k)){seen.get(k).tests.push(r.tests?.name||'—');}
+          else{const g={...r,tests:[r.tests?.name||'—']};seen.set(k,g);grps.push(g);}
+        }
+        return grps.map(g=>`<tr><td>${g.tests.join(', ')}</td><td>${g.date}</td><td>${g.file_url?`<a href="${g.file_url}" target="_blank" class="report-file-link">📎 ${g.file_name||'View'}</a>`:g.file_name||'—'}</td><td style="color:var(--text3)">${g.remark||'—'}</td></tr>`).join('');
+      })()}</tbody>
       </table></div>
     </div>
     <div class="portal-card"><h3>💳 My Bills</h3>
