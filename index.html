@@ -369,7 +369,7 @@ tr:hover td{background:rgba(255,255,255,.015)}
           <button class="btn btn-primary btn-sm" id="btn-new-report" onclick="openModal('m-report')">+ Upload Report</button>
         </div>
         <div class="table-wrap"><table>
-          <thead><tr><th>ID</th><th>Patient</th><th>Test</th><th>Date</th><th>File</th><th>Remark</th></tr></thead>
+          <thead><tr><th>ID</th><th>Patient</th><th>Test</th><th>Date</th><th>File</th><th>Remark</th><th></th></tr></thead>
           <tbody id="tbl-reports"></tbody>
         </table></div>
       </div>
@@ -1026,28 +1026,38 @@ async function loadReports(){
   }
   const rows=await sbGet('reports','report_id,patient_id,test_id,date,file_name,file_url,remark,patients(name),tests(name)',filters,'report_id.desc');
 
-  // Group rows by file_url+patient_id+date so multi-test uploads show as one row
+  // Group by patient+date+file_url (if has file) OR just patient+date (if no file)
+  // This merges all same-day same-patient rows whether they have a file or not
   const groups=[];
   const seen=new Map();
   for(const r of rows){
-    const key=(r.file_url||r.file_name||r.report_id)+'|'+r.patient_id+'|'+r.date;
+    const key=r.patient_id+'|'+r.date+'|'+(r.file_url||'nofile');
     if(seen.has(key)){
       seen.get(key).tests.push(r.tests?.name||'—');
+      seen.get(key)._ids.push(r.report_id);
     }else{
-      const g={...r,tests:[r.tests?.name||'—'],_key:key};
+      const g={...r,tests:[r.tests?.name||'—'],_ids:[r.report_id]};
       seen.set(key,g);
       groups.push(g);
     }
   }
 
+  const canDelete=currentRole==='admin';
   document.getElementById('tbl-reports').innerHTML=groups.length?groups.map(g=>`<tr>
     <td><span class="badge b-purple">R-${g.report_id}</span></td>
     <td>${g.patients?.name||'—'}</td>
     <td>${g.tests.join(', ')}</td>
     <td style="color:var(--text3)">${g.date}</td>
     <td>${g.file_url?`<a href="${g.file_url}" target="_blank" class="report-file-link">📎 ${g.file_name||'View'}</a>`:g.file_name?`<span style="font-family:'DM Mono',monospace;font-size:12px;color:var(--text3)">${g.file_name}</span>`:'—'}</td>
-    <td style="color:var(--text3);max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${g.remark||'—'}</td>
-  </tr>`).join(''):`<tr class="empty-row"><td colspan="6">No reports</td></tr>`;
+    <td style="color:var(--text3);max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${g.remark||'—'}</td>
+    <td>${canDelete?`<button class="btn btn-danger btn-xs" onclick="deleteReportGroup(${JSON.stringify(g._ids)})">Delete</button>`:'—'}</td>
+  </tr>`).join(''):`<tr class="empty-row"><td colspan="7">No reports</td></tr>`;
+}
+
+async function deleteReportGroup(ids){
+  if(!confirm('Delete this report'+(ids.length>1?' and all '+ids.length+' associated test entries':'')+' ?'))return;
+  for(const id of ids) await sbDelete('reports',[`report_id=eq.${id}`]);
+  toast('Deleted');loadReports();
 }
 
 async function saveReport(){
@@ -1185,7 +1195,7 @@ async function loadPatientPortal(){
         if(!reports.length)return '<tr class="empty-row"><td colspan="4">No reports yet</td></tr>';
         const seen=new Map(),grps=[];
         for(const r of reports){
-          const k=(r.file_url||r.file_name||r.report_id)+'|'+r.date;
+          const k=r.patient_id+'|'+r.date+'|'+(r.file_url||'nofile');
           if(seen.has(k)){seen.get(k).tests.push(r.tests?.name||'—');}
           else{const g={...r,tests:[r.tests?.name||'—']};seen.set(k,g);grps.push(g);}
         }
