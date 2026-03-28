@@ -503,7 +503,9 @@ tr:hover td{background:rgba(255,255,255,.015)}
   <h2>Upload Report</h2>
   <div class="form-grid">
     <div class="fg full"><label>Patient *</label><select id="m-r-patient"><option value="">Select Patient</option></select></div>
-    <div class="fg full"><label>Test *</label><select id="m-r-test"><option value="">Select Test</option></select></div>
+    <div class="fg full"><label>Tests * <span style="font-size:10px;color:var(--text3);font-weight:400;text-transform:none;letter-spacing:0">(select one or more)</span></label>
+      <div class="checklist" id="m-r-tests" style="max-height:160px"></div>
+    </div>
     <div class="fg"><label>Date *</label><input id="m-r-date" type="date"></div>
     <div class="fg full"><label>Report File</label>
       <div class="file-drop" id="report-drop">
@@ -772,7 +774,10 @@ async function loadPanel(name){
     if(name==='patients')await loadPatients();
     if(name==='doctors')await loadDoctors();
     if(name==='tests')await loadTests();
-    if(name==='appointments')await loadAppointments();
+    if(name==='appointments'){
+      await loadAppointments();
+      startRefresh('appointments',loadAppointments,3000);
+    }
     if(name==='samples')await loadSamples();
     if(name==='reports')await loadReports();
     if(name==='billing')await loadBilling();
@@ -882,12 +887,71 @@ async function saveAppt(){
   if(currentRole==='patient'){pid=currentUser.id;}
   else{pid=document.getElementById('m-a-patient').value;}
   if(!pid||!date||!time)return toast('Fill required fields',false);
+  const btn=document.querySelector('#m-appt .btn-primary');
+  if(btn){btn.disabled=true;btn.textContent='Booking…';}
   try{
+    // Optimistic: add row to table immediately
+    const patName=currentRole==='patient'?currentUser.name:(allPatients.find(p=>p.patient_id===parseInt(pid))?.name||'—');
+    const docName=allDoctors.find(d=>d.doctor_id===parseInt(did))?.name||'—';
+    const tempId='temp-'+Date.now();
+    const tbody=document.getElementById('tbl-appointments');
+    if(tbody){
+      const emptyRow=tbody.querySelector('.empty-row');
+      if(emptyRow)emptyRow.remove();
+      const tr=document.createElement('tr');
+      tr.id=tempId;
+      tr.innerHTML=`
+        <td><span class="badge b-blue">…</span></td>
+        <td>${patName}</td><td>${docName}</td>
+        <td style="color:var(--text3)">${date}</td>
+        <td style="font-family:'DM Mono',monospace">${time}</td>
+        <td><span class="badge b-blue">Scheduled</span></td>
+        <td style="color:var(--text3);font-size:12px">${notes||'—'}</td>
+        <td><span style="color:var(--text3);font-size:11px">saving…</span></td>`;
+      tbody.insertBefore(tr,tbody.firstChild);
+    }
+    closeModal('m-appt');
+    toast('Appointment booked ✓');
+    // Save to DB then refresh for real ID
     await sbPost('appointments',{patient_id:parseInt(pid),doctor_id:did?parseInt(did):null,date,time,status:'Scheduled',notes});
-    closeModal('m-appt');toast('Appointment booked');loadAppointments();
-  }catch(e){toast('Could not book appointment: '+(e.message||'Unknown error'),false);console.error(e);}
+    await loadAppointments();
+  }catch(e){
+    toast('Could not book: '+(e.message||'error'),false);
+    document.getElementById('temp-'+Date.now())?.remove();
+    console.error(e);
+  }finally{
+    if(btn){btn.disabled=false;btn.textContent='Book';}
+  }
 }
-async function updateAppt(id,status){await sbPatch('appointments',[`appointment_id=eq.${id}`],{status});toast('Updated');loadAppointments();}
+
+async function updateAppt(id,status){
+  // Optimistic: update badge + buttons instantly in the DOM
+  const sc={Scheduled:'b-blue',Confirmed:'b-purple',Completed:'b-green',Cancelled:'b-red'};
+  const rows=document.querySelectorAll('#tbl-appointments tr');
+  for(const row of rows){
+    if(row.innerHTML.includes(`updateAppt(${id},`) || row.innerHTML.includes(`A-${id}`)){
+      const badge=row.querySelector('.badge.b-blue,.badge.b-purple,.badge.b-green,.badge.b-red');
+      if(badge){badge.className=`badge ${sc[status]||'b-blue'}`;badge.textContent=status;}
+      const actionCell=row.querySelector('td:last-child');
+      if(actionCell){
+        if(status==='Cancelled'||status==='Completed'){
+          actionCell.innerHTML='—';
+        }else if(status==='Confirmed'){
+          actionCell.innerHTML=`
+            ${currentRole==='admin'?`<button class="btn btn-success btn-xs" onclick="updateAppt(${id},'Completed')">Done</button>`:''}
+            <button class="btn btn-danger btn-xs" onclick="updateAppt(${id},'Cancelled')">Cancel</button>`;
+        }
+      }
+      break;
+    }
+  }
+  const statusLabels={Confirmed:'Confirmed ✓',Completed:'Marked complete ✓',Cancelled:'Cancelled'};
+  toast(statusLabels[status]||'Updated');
+  // Persist to DB in background — no await on UI thread
+  sbPatch('appointments',[`appointment_id=eq.${id}`],{status})
+    .then(()=>loadAppointments())
+    .catch(e=>{toast('Update failed',false);loadAppointments();console.error(e);});
+}
 
 // ══ SAMPLES ══
 async function loadSamples(){
@@ -974,9 +1038,10 @@ async function loadReports(){
 
 async function saveReport(){
   const pid=document.getElementById('m-r-patient').value;
-  const tid=document.getElementById('m-r-test').value;
   const date=document.getElementById('m-r-date').value;
-  if(!pid||!tid||!date)return toast('Fill required fields',false);
+  const checkedTests=[...document.querySelectorAll('#m-r-tests input:checked')];
+  if(!pid||!date||!checkedTests.length)return toast('Select a patient, date and at least one test',false);
+  const tids=checkedTests.map(c=>parseInt(c.value));
   const btn=document.getElementById('btn-save-report');
   btn.disabled=true;btn.textContent='Uploading…';
   const prog=document.getElementById('report-upload-progress');
@@ -990,36 +1055,33 @@ async function saveReport(){
       fileName=reportFileObj.name;
       bar.style.width='100%';
     }
-    const aid=null;
     const remark=document.getElementById('m-r-remark').value.trim();
-    // Include legacy 'file' column as empty string to satisfy old NOT NULL constraint
-    // (run: alter table reports alter column file drop not null; in Supabase to remove this)
-    const payload={
-      patient_id:parseInt(pid),
-      test_id:parseInt(tid),
-      date,
-      file_name:fileName||'',
-      file_url:fileUrl||null,
-      file: fileName||'',        // legacy column — kept for backward compat
-      remark:remark||null,
-      managed_by:aid?parseInt(aid):null
-    };
-    const result=await sbPost('reports',payload);
-    const report=Array.isArray(result)?result[0]:result;
-    if(!report||!report.report_id)throw new Error('Report was not saved');
+    // Create one report row per selected test (same file shared across all)
+    for(const tid of tids){
+      await sbPost('reports',{
+        patient_id:parseInt(pid),
+        test_id:tid,
+        date,
+        file_name:fileName||'',
+        file_url:fileUrl||null,
+        file:fileName||'',
+        remark:remark||null,
+        managed_by:null
+      });
+    }
     closeModal('m-report');
     reportFileObj=null;
     document.getElementById('report-file-name').style.display='none';
     document.getElementById('report-file-input').value='';
+    document.querySelectorAll('#m-r-tests input:checked').forEach(c=>c.checked=false);
     prog.style.display='none';bar.style.width='0%';
     document.getElementById('m-r-remark').value='';
-    toast('Report uploaded ✓');
+    toast(`Report uploaded for ${tids.length} test${tids.length>1?'s':''} ✓`);
     loadReports();
   }catch(e){
     toast('Upload failed: '+e.message,false);
     console.error(e);
-    const prog2=document.getElementById('report-upload-progress');
-    if(prog2)prog2.style.display='none';
+    if(prog)prog.style.display='none';
   }
   finally{btn.disabled=false;btn.textContent='Upload';}
 }
@@ -1204,8 +1266,8 @@ async function openModal(id){
   // Test selects
   const sSel=document.getElementById('m-s-tests');
   if(sSel)sSel.innerHTML=allTests.map(t=>`<label><input type="checkbox" value="${t.test_id}" data-price="${t.price}"> ${t.name} <span style="margin-left:auto;font-family:'DM Mono',monospace;color:var(--text3);font-size:11px">${t.type||''}</span></label>`).join('');
-  const rtSel=document.getElementById('m-r-test');
-  if(rtSel)rtSel.innerHTML='<option value="">Select Test</option>'+allTests.map(t=>`<option value="${t.test_id}">${t.name}</option>`).join('');
+  const rtList=document.getElementById('m-r-tests');
+  if(rtList)rtList.innerHTML=allTests.map(t=>`<label><input type="checkbox" value="${t.test_id}" style="width:14px;height:14px;accent-color:var(--accent)"> ${t.name} <span style="margin-left:auto;font-family:'DM Mono',monospace;color:var(--text3);font-size:11px">${t.type}</span></label>`).join('');
 
   if(id==='m-bill'){
     document.getElementById('m-b-tests').innerHTML=allTests.map(t=>`<label><input type="checkbox" value="${t.test_id}" data-price="${t.price}" onchange="calcBillTotal()"> ${t.name} <span style="margin-left:auto;font-family:'DM Mono',monospace;color:var(--orange);font-size:11px">$${parseFloat(t.price).toFixed(2)}</span></label>`).join('');
