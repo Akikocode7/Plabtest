@@ -725,7 +725,7 @@ const PATIENT_NAV=[
 
 function buildSidebar(){
   const nav=currentRole==='admin'?ADMIN_NAV:currentRole==='doctor'?DOCTOR_NAV:currentRole==='patient'?PATIENT_NAV:ADMIN_NAV;
-  document.getElementById('sidebar').innerHTML=nav.map(s=>`<div class="nav-section"><div class="nav-label">₹{s.section}</div>${s.items.map(i=>`<div class="nav-item" onclick="showPanel('${i.panel}')" data-panel="${i.panel}"><span>${i.icon}</span>${i.label}</div>`).join('')}</div>`).join('');
+  document.getElementById('sidebar').innerHTML=nav.map(s=>`<div class="nav-section"><div class="nav-label">${s.section}</div>${s.items.map(i=>`<div class="nav-item" onclick="showPanel('${i.panel}')" data-panel="${i.panel}"><span>${i.icon}</span>${i.label}</div>`).join('')}</div>`).join('');
   showPanel(nav[0].items[0].panel);
 }
 
@@ -796,9 +796,9 @@ async function loadDashboard(){
     {label:'Tests',value:tests.length,icon:'🧪',c:'var(--green)'},
     {label:'Reports',value:reports.length,icon:'📋',c:'var(--purple)'},
     {label:'Revenue',value:'₹'+revenue.toFixed(2),icon:'💳',c:'var(--orange)'},
-  ].map(s=>`<div class="stat-card" style="--c:${s.c}"><div class="stat-icon">₹{s.icon}</div><div class="stat-label">₹{s.label}</div><div class="stat-value">₹{s.value}</div></div>`).join('');
+  ].map(s=>`<div class="stat-card" style="--c:${s.c}"><div class="stat-icon">${s.icon}</div><div class="stat-label">${s.label}</div><div class="stat-value">${s.value}</div></div>`).join('');
   const recPats=await sbGet('patients','patient_id,name,registration_date',[],'patient_id.desc','5');
-  document.getElementById('dash-patients').innerHTML=recPats.length?recPats.map(p=>`<tr><td><span class="badge b-blue">P-${p.patient_id}</span></td><td>${p.name}</td><td style="color:var(--text3)">₹{p.registration_date}</td></tr>`).join(''):`<tr class="empty-row"><td colspan="3">No patients</td></tr>`;
+  document.getElementById('dash-patients').innerHTML=recPats.length?recPats.map(p=>`<tr><td><span class="badge b-blue">P-${p.patient_id}</span></td><td>${p.name}</td><td style="color:var(--text3)">${p.registration_date}</td></tr>`).join(''):`<tr class="empty-row"><td colspan="3">No patients</td></tr>`;
   const pending=await sbGet('sample_collection','sample_id,patient_id,status',['status=eq.Pending'],'sample_id.desc','5');
   const pids=[...new Set(pending.map(s=>s.patient_id))];let pmap={};
   if(pids.length){const ps=await sbGet('patients','patient_id,name',[`patient_id=in.(${pids.join(',')})`]);ps.forEach(p=>pmap[p.patient_id]=p.name);}
@@ -810,7 +810,7 @@ async function loadPatients(){allPatients=await sbGet('patients','patient_id,nam
 function renderPatients(){
   const q=(document.getElementById('search-patients')||{}).value||'';
   const list=allPatients.filter(p=>(p.name+p.contact).toLowerCase().includes(q.toLowerCase()));
-  document.getElementById('tbl-patients').innerHTML=list.length?list.map(p=>`<tr><td><span class="badge b-blue">P-${p.patient_id}</span></td><td>${p.name}</td><td>${p.gender}</td><td>${p.age}</td><td style="font-family:'DM Mono',monospace;font-size:12px">₹{p.contact}</td><td style="color:var(--text3)">₹{p.registration_date}</td><td>${currentRole==='admin'?`<button class="btn btn-danger btn-xs" onclick="deleteRow('patients','patient_id',${p.patient_id},'patients')">Delete</button>`:'—'}</td></tr>`).join(''):`<tr class="empty-row"><td colspan="7">No patients</td></tr>`;
+  document.getElementById('tbl-patients').innerHTML=list.length?list.map(p=>`<tr><td><span class="badge b-blue">P-${p.patient_id}</span></td><td>${p.name}</td><td>${p.gender}</td><td>${p.age}</td><td style="font-family:'DM Mono',monospace;font-size:12px">${p.contact}</td><td style="color:var(--text3)">${p.registration_date}</td><td>${currentRole==='admin'?`<button class="btn btn-danger btn-xs" onclick="deleteRow('patients','patient_id',${p.patient_id},'patients')">Delete</button>`:'—'}</td></tr>`).join(''):`<tr class="empty-row"><td colspan="7">No patients</td></tr>`;
 }
 async function savePatient(){
   const g=id=>document.getElementById(id).value.trim();
@@ -827,7 +827,7 @@ async function loadDoctors(){allDoctors=await sbGet('doctors','doctor_id,name,sp
 function renderDoctors(){
   const q=(document.getElementById('search-doctors')||{}).value||'';
   const list=allDoctors.filter(d=>(d.name+(d.specialization||'')).toLowerCase().includes(q.toLowerCase()));
-  document.getElementById('tbl-doctors').innerHTML=list.length?list.map(d=>`<tr><td><span class="badge b-purple">D-${d.doctor_id}</span></td><td>${d.name}</td><td>${d.specialization||'—'}</td><td style="font-family:'DM Mono',monospace;font-size:12px">₹{d.contact||'—'}</td><td>${currentRole==='admin'?`<button class="btn btn-danger btn-xs" onclick="deleteRow('doctors','doctor_id',${d.doctor_id},'doctors')">Delete</button>`:'—'}</td></tr>`).join(''):`<tr class="empty-row"><td colspan="5">No doctors</td></tr>`;
+  document.getElementById('tbl-doctors').innerHTML=list.length?list.map(d=>`<tr><td><span class="badge b-purple">D-${d.doctor_id}</span></td><td>${d.name}</td><td>${d.specialization||'—'}</td><td style="font-family:'DM Mono',monospace;font-size:12px">${d.contact||'—'}</td><td>${currentRole==='admin'?`<button class="btn btn-danger btn-xs" onclick="deleteRow('doctors','doctor_id',${d.doctor_id},'doctors')">Delete</button>`:'—'}</td></tr>`).join(''):`<tr class="empty-row"><td colspan="5">No doctors</td></tr>`;
 }
 async function saveDoctor(){
   const g=id=>document.getElementById(id).value.trim();
@@ -845,7 +845,7 @@ function renderTests(){
   const list=allTests.filter(t=>(t.name+t.type).toLowerCase().includes(q.toLowerCase()));
   const colors={Haematology:'b-blue',Biochemistry:'b-green',Microbiology:'b-red',Urinalysis:'b-orange',Immunology:'b-purple',Histopathology:'b-yellow',Other:'b-blue'};
   const canEdit=currentRole==='admin';
-  document.getElementById('tbl-tests').innerHTML=list.length?list.map(t=>`<tr><td><span class="badge b-blue">T-${t.test_id}</span></td><td>${t.name}</td><td><span class="badge ${colors[t.type]||'b-blue'}">₹{t.type}</span></td><td style="font-family:'DM Mono',monospace;color:var(--orange)">₹${parseFloat(t.price).toFixed(2)}</td><td>${canEdit?`<button class="btn btn-danger btn-xs" onclick="deleteRow('tests','test_id',${t.test_id},'tests')">Delete</button>`:'—'}</td></tr>`).join(''):`<tr class="empty-row"><td colspan="5">No tests</td></tr>`;
+  document.getElementById('tbl-tests').innerHTML=list.length?list.map(t=>`<tr><td><span class="badge b-blue">T-${t.test_id}</span></td><td>${t.name}</td><td><span class="badge ${colors[t.type]||'b-blue'}">${t.type}</span></td><td style="font-family:'DM Mono',monospace;color:var(--orange)">₹${parseFloat(t.price).toFixed(2)}</td><td>${canEdit?`<button class="btn btn-danger btn-xs" onclick="deleteRow('tests','test_id',${t.test_id},'tests')">Delete</button>`:'—'}</td></tr>`).join(''):`<tr class="empty-row"><td colspan="5">No tests</td></tr>`;
 }
 async function saveTest(){
   const g=id=>document.getElementById(id).value.trim();
@@ -867,10 +867,10 @@ async function loadAppointments(){
     return `<tr data-appt-id="${a.appointment_id}">
     <td><span class="badge b-blue">A-${a.appointment_id}</span></td>
     <td>${a.patients?.name||'—'}</td><td>${a.doctors?.name||'—'}</td>
-    <td style="color:var(--text3)">₹{a.date}</td>
-    <td style="font-family:'DM Mono',monospace">₹{a.time}</td>
-    <td class="appt-status-cell"><span class="badge ${sc[a.status]||'b-blue'}">₹{a.status}</span></td>
-    <td style="color:var(--text3);font-size:12px;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">₹{a.notes||'—'}</td>
+    <td style="color:var(--text3)">${a.date}</td>
+    <td style="font-family:'DM Mono',monospace">${a.time}</td>
+    <td class="appt-status-cell"><span class="badge ${sc[a.status]||'b-blue'}">${a.status}</span></td>
+    <td style="color:var(--text3);font-size:12px;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${a.notes||'—'}</td>
     <td class="appt-action-cell" style="display:flex;gap:4px;flex-wrap:wrap">
       ${a.status==='Scheduled'&&canManage?`<button class="btn btn-success btn-xs" onclick="updateAppt(${a.appointment_id},'Confirmed')">Confirm</button>`:''}
       ${a.status==='Confirmed'&&currentRole==='admin'?`<button class="btn btn-success btn-xs" onclick="updateAppt(${a.appointment_id},'Completed')">Done</button>`:''}
@@ -903,10 +903,10 @@ async function saveAppt(){
       tr.innerHTML=`
         <td><span class="badge b-blue">…</span></td>
         <td>${patName}</td><td>${docName}</td>
-        <td style="color:var(--text3)">₹{date}</td>
-        <td style="font-family:'DM Mono',monospace">₹{time}</td>
+        <td style="color:var(--text3)">${date}</td>
+        <td style="font-family:'DM Mono',monospace">${time}</td>
         <td><span class="badge b-blue">Scheduled</span></td>
-        <td style="color:var(--text3);font-size:12px">₹{notes||'—'}</td>
+        <td style="color:var(--text3);font-size:12px">${notes||'—'}</td>
         <td><span style="color:var(--text3);font-size:11px">saving…</span></td>`;
       tbody.insertBefore(tr,tbody.firstChild);
     }
@@ -931,7 +931,7 @@ async function updateAppt(id,status){
   if(row){
     // Update status badge instantly
     const statusCell=row.querySelector('.appt-status-cell');
-    if(statusCell) statusCell.innerHTML=`<span class="badge ${sc[status]||'b-blue'}">₹{status}</span>`;
+    if(statusCell) statusCell.innerHTML=`<span class="badge ${sc[status]||'b-blue'}">${status}</span>`;
     // Update action buttons instantly
     const actionCell=row.querySelector('.appt-action-cell');
     if(actionCell){
@@ -984,9 +984,9 @@ async function loadSamples(){
     <td><span class="badge b-orange">S-${g.sample_id}</span></td>
     <td>${g.patients?.name||'—'}</td>
     <td>${g.tests.join(', ')}</td>
-    <td style="color:var(--text3)">₹{g.collection_date}</td>
-    <td><span class="badge ${sc(g.status)}">₹{g.status}</span></td>
-    <td style="color:var(--text3);font-size:12px;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">₹{g.notes||'—'}</td>
+    <td style="color:var(--text3)">${g.collection_date}</td>
+    <td><span class="badge ${sc(g.status)}">${g.status}</span></td>
+    <td style="color:var(--text3);font-size:12px;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${g.notes||'—'}</td>
     <td style="display:flex;gap:4px;flex-wrap:wrap">
       ${canUpdate&&g.status==='Pending'   ?`<button class="btn btn-success btn-xs" onclick="updateSampleGroup(${JSON.stringify(g._ids)},'Collected')">Collect</button>`:''}
       ${canUpdate&&g.status==='Collected' ?`<button class="btn btn-success btn-xs" onclick="updateSampleGroup(${JSON.stringify(g._ids)},'Processing')">Process</button>`:''}
@@ -1074,9 +1074,9 @@ async function loadReports(){
     <td><span class="badge b-purple">R-${g.report_id}</span></td>
     <td>${g.patients?.name||'—'}</td>
     <td>${g.tests.join(', ')}</td>
-    <td style="color:var(--text3)">₹{g.date}</td>
-    <td>${g.file_url?`<a href="${g.file_url}" target="_blank" class="report-file-link">📎 ${g.file_name||'View'}</a>`:(!g.file_name||/^s\d+$/.test(g.file_name))?'—':`<span style="font-family:'DM Mono',monospace;font-size:12px;color:var(--text3)">₹{g.file_name}</span>`}</td>
-    <td style="color:var(--text3);max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">₹{g.remark||'—'}</td>
+    <td style="color:var(--text3)">${g.date}</td>
+    <td>${g.file_url?`<a href="${g.file_url}" target="_blank" class="report-file-link">📎 ${g.file_name||'View'}</a>`:(!g.file_name||/^s\d+$/.test(g.file_name))?'—':`<span style="font-family:'DM Mono',monospace;font-size:12px;color:var(--text3)">${g.file_name}</span>`}</td>
+    <td style="color:var(--text3);max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${g.remark||'—'}</td>
     <td>${canDelete?`<button class="btn btn-danger btn-xs" onclick="deleteReportGroup(${JSON.stringify(g._ids)})">Delete</button>`:'—'}</td>
   </tr>`).join(''):`<tr class="empty-row"><td colspan="7">No reports</td></tr>`;
 }
@@ -1148,8 +1148,8 @@ async function loadBilling(){
     <td><span class="badge b-orange">B-${b.bill_id}</span></td>
     <td>${b.patients?.name||'—'}</td>
     <td style="font-family:'DM Mono',monospace;color:var(--orange);font-weight:700">₹${parseFloat(b.amount).toFixed(2)}</td>
-    <td><span class="badge ${b.payment_status==='Paid'?'b-green':'b-red'}">₹{b.payment_status}</span></td>
-    <td style="color:var(--text3)">₹{b.date}</td>
+    <td><span class="badge ${b.payment_status==='Paid'?'b-green':'b-red'}">${b.payment_status}</span></td>
+    <td style="color:var(--text3)">${b.date}</td>
     <td>${b.payment_status==='Pending'&&canPay?`<button class="btn btn-success btn-xs" onclick="payBill(${b.bill_id})">Pay Now</button>`:b.payment_status==='Pending'&&canMark?`<button class="btn btn-success btn-xs" onclick="markPaid(${b.bill_id})">Mark Paid</button>`:'—'}</td>
   </tr>`).join(''):`<tr class="empty-row"><td colspan="6">No bills</td></tr>`;
 }
@@ -1198,22 +1198,22 @@ async function loadPatientPortal(){
   document.getElementById('portal-content').innerHTML=`
     <div class="portal-card"><h3>👤 My Profile</h3>
       <div class="info-grid">
-        <div class="info-item"><div class="info-key">Name</div><div class="info-val">₹{p.name}</div></div>
-        <div class="info-item"><div class="info-key">Gender</div><div class="info-val">₹{p.gender}</div></div>
-        <div class="info-item"><div class="info-key">Age</div><div class="info-val">₹{p.age}</div></div>
-        <div class="info-item"><div class="info-key">Contact</div><div class="info-val">₹{p.contact}</div></div>
-        <div class="info-item"><div class="info-key">Address</div><div class="info-val">₹{p.address||'—'}</div></div>
-        <div class="info-item"><div class="info-key">Registered</div><div class="info-val">₹{p.registration_date}</div></div>
+        <div class="info-item"><div class="info-key">Name</div><div class="info-val">${p.name}</div></div>
+        <div class="info-item"><div class="info-key">Gender</div><div class="info-val">${p.gender}</div></div>
+        <div class="info-item"><div class="info-key">Age</div><div class="info-val">${p.age}</div></div>
+        <div class="info-item"><div class="info-key">Contact</div><div class="info-val">${p.contact}</div></div>
+        <div class="info-item"><div class="info-key">Address</div><div class="info-val">${p.address||'—'}</div></div>
+        <div class="info-item"><div class="info-key">Registered</div><div class="info-val">${p.registration_date}</div></div>
       </div>
     </div>
     <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px">
-      <div class="stat-card" style="--c:var(--accent)"><div class="stat-icon">📅</div><div class="stat-label">Appointments</div><div class="stat-value">₹{appts.length}</div></div>
-      <div class="stat-card" style="--c:var(--purple)"><div class="stat-icon">📋</div><div class="stat-label">Reports</div><div class="stat-value">₹{reports.length}</div></div>
-      <div class="stat-card" style="--c:${pendBills>0?'var(--red)':'var(--green)'}"><div class="stat-icon">💳</div><div class="stat-label">Pending Bills</div><div class="stat-value">₹{pendBills}</div></div>
+      <div class="stat-card" style="--c:var(--accent)"><div class="stat-icon">📅</div><div class="stat-label">Appointments</div><div class="stat-value">${appts.length}</div></div>
+      <div class="stat-card" style="--c:var(--purple)"><div class="stat-icon">📋</div><div class="stat-label">Reports</div><div class="stat-value">${reports.length}</div></div>
+      <div class="stat-card" style="--c:${pendBills>0?'var(--red)':'var(--green)'}"><div class="stat-icon">💳</div><div class="stat-label">Pending Bills</div><div class="stat-value">${pendBills}</div></div>
     </div>
     <div class="portal-card"><h3>📅 Recent Appointments</h3>
       <div class="table-wrap"><table><thead><tr><th>Doctor</th><th>Date</th><th>Time</th><th>Status</th></tr></thead>
-      <tbody>${appts.slice(0,5).length?appts.slice(0,5).map(a=>`<tr><td>${a.doctors?.name||'—'}</td><td>${a.date}</td><td style="font-family:'DM Mono',monospace">₹{a.time}</td><td><span class="badge ${a.status==='Completed'?'b-green':a.status==='Cancelled'?'b-red':a.status==='Confirmed'?'b-purple':'b-blue'}">₹{a.status}</span></td></tr>`).join(''):'<tr class="empty-row"><td colspan="4">No appointments</td></tr>'}</tbody>
+      <tbody>${appts.slice(0,5).length?appts.slice(0,5).map(a=>`<tr><td>${a.doctors?.name||'—'}</td><td>${a.date}</td><td style="font-family:'DM Mono',monospace">${a.time}</td><td><span class="badge ${a.status==='Completed'?'b-green':a.status==='Cancelled'?'b-red':a.status==='Confirmed'?'b-purple':'b-blue'}">${a.status}</span></td></tr>`).join(''):'<tr class="empty-row"><td colspan="4">No appointments</td></tr>'}</tbody>
       </table></div>
       <div style="margin-top:10px"><button class="btn btn-secondary btn-sm" onclick="showPanel('appointments')">Book New →</button></div>
     </div>
@@ -1227,13 +1227,13 @@ async function loadPatientPortal(){
           if(seen.has(k)){seen.get(k).tests.push(r.tests?.name||'—');}
           else{const g={...r,tests:[r.tests?.name||'—']};seen.set(k,g);grps.push(g);}
         }
-        return grps.map(g=>`<tr><td>${g.tests.join(', ')}</td><td>${g.date}</td><td>${g.file_url?`<a href="${g.file_url}" target="_blank" class="report-file-link">📎 ${g.file_name||'View'}</a>`:g.file_name||'—'}</td><td style="color:var(--text3)">₹{g.remark||'—'}</td></tr>`).join('');
+        return grps.map(g=>`<tr><td>${g.tests.join(', ')}</td><td>${g.date}</td><td>${g.file_url?`<a href="${g.file_url}" target="_blank" class="report-file-link">📎 ${g.file_name||'View'}</a>`:g.file_name||'—'}</td><td style="color:var(--text3)">${g.remark||'—'}</td></tr>`).join('');
       })()}</tbody>
       </table></div>
     </div>
     <div class="portal-card"><h3>💳 My Bills</h3>
       <div class="table-wrap"><table><thead><tr><th>Date</th><th>Amount</th><th>Status</th><th></th></tr></thead>
-      <tbody>${bills.length?bills.map(b=>`<tr><td>${b.date}</td><td style="color:var(--orange);font-weight:700">₹${parseFloat(b.amount).toFixed(2)}</td><td><span class="badge ${b.payment_status==='Paid'?'b-green':'b-red'}">₹{b.payment_status}</span></td><td>${b.payment_status==='Pending'?`<button class="btn btn-success btn-xs" onclick="payBill(${b.bill_id})">Pay Now</button>`:'—'}</td></tr>`).join(''):'<tr class="empty-row"><td colspan="4">No bills</td></tr>'}</tbody>
+      <tbody>${bills.length?bills.map(b=>`<tr><td>${b.date}</td><td style="color:var(--orange);font-weight:700">₹${parseFloat(b.amount).toFixed(2)}</td><td><span class="badge ${b.payment_status==='Paid'?'b-green':'b-red'}">${b.payment_status}</span></td><td>${b.payment_status==='Pending'?`<button class="btn btn-success btn-xs" onclick="payBill(${b.bill_id})">Pay Now</button>`:'—'}</td></tr>`).join(''):'<tr class="empty-row"><td colspan="4">No bills</td></tr>'}</tbody>
       </table></div>
     </div>`;
 }
@@ -1245,14 +1245,14 @@ async function loadDoctorPortal(){
   document.getElementById('doc-portal-content').innerHTML=`
     <div class="portal-card"><h3>🩺 ${d.name}</h3>
       <div class="info-grid">
-        <div class="info-item"><div class="info-key">Specialization</div><div class="info-val">₹{d.specialization||'—'}</div></div>
-        <div class="info-item"><div class="info-key">Contact</div><div class="info-val">₹{d.contact||'—'}</div></div>
+        <div class="info-item"><div class="info-key">Specialization</div><div class="info-val">${d.specialization||'—'}</div></div>
+        <div class="info-item"><div class="info-key">Contact</div><div class="info-val">${d.contact||'—'}</div></div>
         <div class="info-item"><div class="info-key">Doctor ID</div><div class="info-val"><span class="badge b-purple">D-${d.doctor_id}</span></div></div>
       </div>
     </div>
     <div class="portal-card"><h3>📅 My Appointments</h3>
       <div class="table-wrap"><table><thead><tr><th>Patient</th><th>Date</th><th>Time</th><th>Status</th><th>Notes</th><th></th></tr></thead>
-      <tbody>${appts.length?appts.map(a=>`<tr><td>${a.patients?.name||'—'}</td><td>${a.date}</td><td style="font-family:'DM Mono',monospace">₹{a.time}</td><td><span class="badge ${a.status==='Completed'?'b-green':a.status==='Cancelled'?'b-red':a.status==='Confirmed'?'b-purple':'b-blue'}">₹{a.status}</span></td><td style="color:var(--text3);font-size:12px">₹{a.notes||'—'}</td><td style="display:flex;gap:4px;flex-wrap:wrap">₹{a.status==='Scheduled'?`<button class="btn btn-success btn-xs" onclick="updateAppt(${a.appointment_id},'Confirmed')">Confirm</button>`:''} ${a.status==='Scheduled'||a.status==='Confirmed'?`<button class="btn btn-danger btn-xs" onclick="updateAppt(${a.appointment_id},'Cancelled')">Cancel</button>`:''}</td></tr>`).join(''):'<tr class="empty-row"><td colspan="6">No appointments</td></tr>'}</tbody>
+      <tbody>${appts.length?appts.map(a=>`<tr><td>${a.patients?.name||'—'}</td><td>${a.date}</td><td style="font-family:'DM Mono',monospace">${a.time}</td><td><span class="badge ${a.status==='Completed'?'b-green':a.status==='Cancelled'?'b-red':a.status==='Confirmed'?'b-purple':'b-blue'}">${a.status}</span></td><td style="color:var(--text3);font-size:12px">${a.notes||'—'}</td><td style="display:flex;gap:4px;flex-wrap:wrap">${a.status==='Scheduled'?`<button class="btn btn-success btn-xs" onclick="updateAppt(${a.appointment_id},'Confirmed')">Confirm</button>`:''} ${a.status==='Scheduled'||a.status==='Confirmed'?`<button class="btn btn-danger btn-xs" onclick="updateAppt(${a.appointment_id},'Cancelled')">Cancel</button>`:''}</td></tr>`).join(''):'<tr class="empty-row"><td colspan="6">No appointments</td></tr>'}</tbody>
       </table></div>
       <div style="margin-top:10px;display:flex;gap:8px">
         <button class="btn btn-secondary btn-sm" onclick="showPanel('reports')">Upload Report →</button>
@@ -1271,19 +1271,19 @@ async function loadAssistantPortal(){
   document.getElementById('asst-portal-content').innerHTML=`
     <div class="portal-card"><h3>🔬 ${a.name}</h3>
       <div class="info-grid">
-        <div class="info-item"><div class="info-key">Qualification</div><div class="info-val">₹{a.qualification||'—'}</div></div>
-        <div class="info-item"><div class="info-key">Contact</div><div class="info-val">₹{a.contact||'—'}</div></div>
+        <div class="info-item"><div class="info-key">Qualification</div><div class="info-val">${a.qualification||'—'}</div></div>
+        <div class="info-item"><div class="info-key">Contact</div><div class="info-val">${a.contact||'—'}</div></div>
         <div class="info-item"><div class="info-key">ID</div><div class="info-val"><span class="badge b-green">LA-${a.assistant_id}</span></div></div>
       </div>
     </div>
     <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px">
-      <div class="stat-card" style="--c:var(--red)"><div class="stat-icon">🩸</div><div class="stat-label">Pending Samples</div><div class="stat-value">₹{pendSamples.length}</div></div>
-      <div class="stat-card" style="--c:var(--orange)"><div class="stat-icon">💳</div><div class="stat-label">Unpaid Bills</div><div class="stat-value">₹{pendBills.length}</div></div>
-      <div class="stat-card" style="--c:var(--accent)"><div class="stat-icon">📅</div><div class="stat-label">Upcoming Appts</div><div class="stat-value">₹{appts.length}</div></div>
+      <div class="stat-card" style="--c:var(--red)"><div class="stat-icon">🩸</div><div class="stat-label">Pending Samples</div><div class="stat-value">${pendSamples.length}</div></div>
+      <div class="stat-card" style="--c:var(--orange)"><div class="stat-icon">💳</div><div class="stat-label">Unpaid Bills</div><div class="stat-value">${pendBills.length}</div></div>
+      <div class="stat-card" style="--c:var(--accent)"><div class="stat-icon">📅</div><div class="stat-label">Upcoming Appts</div><div class="stat-value">${appts.length}</div></div>
     </div>
     <div class="portal-card"><h3>📅 Upcoming Appointments</h3>
       <div class="table-wrap"><table><thead><tr><th>Patient</th><th>Date</th><th>Time</th><th>Status</th><th></th></tr></thead>
-      <tbody>${appts.length?appts.map(a=>`<tr><td>${a.patients?.name||'—'}</td><td>${a.date}</td><td style="font-family:'DM Mono',monospace">₹{a.time}</td><td><span class="badge b-blue">₹{a.status}</span></td><td><button class="btn btn-success btn-xs" onclick="updateAppt(${a.appointment_id},'Confirmed')">Confirm</button></td></tr>`).join(''):'<tr class="empty-row"><td colspan="5">No upcoming appointments</td></tr>'}</tbody>
+      <tbody>${appts.length?appts.map(a=>`<tr><td>${a.patients?.name||'—'}</td><td>${a.date}</td><td style="font-family:'DM Mono',monospace">${a.time}</td><td><span class="badge b-blue">${a.status}</span></td><td><button class="btn btn-success btn-xs" onclick="updateAppt(${a.appointment_id},'Confirmed')">Confirm</button></td></tr>`).join(''):'<tr class="empty-row"><td colspan="5">No upcoming appointments</td></tr>'}</tbody>
       </table></div>
       <div style="margin-top:10px;display:flex;gap:8px">
         <button class="btn btn-secondary btn-sm" onclick="showPanel('billing')">Generate Bill →</button>
@@ -1308,7 +1308,7 @@ async function openModal(id){
   }
   ['m-a-patient','m-s-patient','m-r-patient','m-b-patient'].forEach(sel=>{
     const el=document.getElementById(sel);if(!el)return;
-    el.innerHTML='<option value="">Select Patient</option>'+modalPatients.map(p=>`<option value="${p.patient_id}">₹{p.name}</option>`).join('');
+    el.innerHTML='<option value="">Select Patient</option>'+modalPatients.map(p=>`<option value="${p.patient_id}">${p.name}</option>`).join('');
   });
   const apptPRow=document.getElementById('appt-patient-row');
   const samplePRow=document.getElementById('sample-patient-row');
@@ -1319,15 +1319,15 @@ async function openModal(id){
 
   // Doctor select
   const aSel=document.getElementById('m-a-doctor');
-  if(aSel)aSel.innerHTML='<option value="">Select Doctor</option>'+allDoctors.map(d=>`<option value="${d.doctor_id}">₹{d.name}</option>`).join('');
+  if(aSel)aSel.innerHTML='<option value="">Select Doctor</option>'+allDoctors.map(d=>`<option value="${d.doctor_id}">${d.name}</option>`).join('');
   const laSel=document.getElementById('m-la-doctor');
-  if(laSel)laSel.innerHTML='<option value="">None</option>'+allDoctors.map(d=>`<option value="${d.doctor_id}">₹{d.name}</option>`).join('');
+  if(laSel)laSel.innerHTML='<option value="">None</option>'+allDoctors.map(d=>`<option value="${d.doctor_id}">${d.name}</option>`).join('');
 
   // Test selects
   const sSel=document.getElementById('m-s-tests');
-  if(sSel)sSel.innerHTML=allTests.map(t=>`<label><input type="checkbox" value="${t.test_id}" data-price="${t.price}"> ${t.name} <span style="margin-left:auto;font-family:'DM Mono',monospace;color:var(--text3);font-size:11px">₹{t.type||''}</span></label>`).join('');
+  if(sSel)sSel.innerHTML=allTests.map(t=>`<label><input type="checkbox" value="${t.test_id}" data-price="${t.price}"> ${t.name} <span style="margin-left:auto;font-family:'DM Mono',monospace;color:var(--text3);font-size:11px">${t.type||''}</span></label>`).join('');
   const rtList=document.getElementById('m-r-tests');
-  if(rtList)rtList.innerHTML=allTests.map(t=>`<label><input type="checkbox" value="${t.test_id}" style="width:14px;height:14px;accent-color:var(--accent)"> ${t.name} <span style="margin-left:auto;font-family:'DM Mono',monospace;color:var(--text3);font-size:11px">₹{t.type}</span></label>`).join('');
+  if(rtList)rtList.innerHTML=allTests.map(t=>`<label><input type="checkbox" value="${t.test_id}" style="width:14px;height:14px;accent-color:var(--accent)"> ${t.name} <span style="margin-left:auto;font-family:'DM Mono',monospace;color:var(--text3);font-size:11px">${t.type}</span></label>`).join('');
 
   if(id==='m-bill'){
     document.getElementById('m-b-tests').innerHTML=allTests.map(t=>`<label><input type="checkbox" value="${t.test_id}" data-price="${t.price}" onchange="calcBillTotal()"> ${t.name} <span style="margin-left:auto;font-family:'DM Mono',monospace;color:var(--orange);font-size:11px">₹${parseFloat(t.price).toFixed(2)}</span></label>`).join('');
