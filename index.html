@@ -1315,76 +1315,87 @@ function toast(msg,ok=true){
 
 // ══ REALTIME ══
 // Single WebSocket to Supabase Realtime — reloads the active panel
-// instantly whenever any row is inserted/updated/deleted in watched tables
+// Realtime — Supabase v2 protocol, single channel for all tables
 let _rt=null;
-const _watchTables=['appointments','sample_collection','reports','billing','patients'];
+let _rtRef=0;
+
+const TABLE_PANELS={
+  appointments:      ['appointments','dashboard','doc-portal','asst-portal','portal'],
+  sample_collection: ['samples','dashboard','asst-portal'],
+  reports:           ['reports','portal','doc-portal'],
+  billing:           ['billing','portal','asst-portal','dashboard'],
+  patients:          ['patients','dashboard'],
+};
 
 function startRealtime(){
   if(_rt){try{_rt.close();}catch(e){}_rt=null;}
-  const wsUrl=SUPABASE_URL.replace('https://','wss://').replace('http://','ws://')
+  const wsUrl=SUPABASE_URL.replace(/^https/,'wss').replace(/^http(?!s)/,'ws')
     +'/realtime/v1/websocket?apikey='+SUPABASE_KEY+'&vsn=1.0.0';
   const ws=new WebSocket(wsUrl);
   _rt=ws;
 
   ws.onopen=()=>{
-    // Subscribe to postgres_changes for each watched table
-    _watchTables.forEach((table,i)=>{
-      ws.send(JSON.stringify({
-        topic:'realtime:public:'+table,
-        event:'phx_join',
-        payload:{config:{postgres_changes:[{event:'*',schema:'public',table}]}},
-        ref:String(i+1)
-      }));
-    });
-    // Heartbeat every 25s
+    _rtRef=0;
+    // Single channel subscription for all tables using Supabase v2 format
+    ws.send(JSON.stringify({
+      topic:'realtime:pathlab',
+      event:'phx_join',
+      payload:{
+        config:{
+          broadcast:{self:false},
+          presence:{key:''},
+          postgres_changes: Object.keys(TABLE_PANELS).map(table=>({
+            event:'*', schema:'public', table
+          }))
+        }
+      },
+      ref:String(++_rtRef)
+    }));
+
     ws._hb=setInterval(()=>{
       if(ws.readyState===1)
         ws.send(JSON.stringify({topic:'phoenix',event:'heartbeat',payload:{},ref:'hb'}));
-    },25000);
+    },20000);
   };
 
   ws.onmessage=(e)=>{
     try{
       const msg=JSON.parse(e.data);
-      // Supabase sends both legacy INSERT and postgres_changes events
-      const isChange=
-        (msg.event==='INSERT'||msg.event==='UPDATE'||msg.event==='DELETE')
-        ||(msg.payload?.data?.type==='INSERT'||msg.payload?.data?.type==='UPDATE'||msg.payload?.data?.type==='DELETE');
-      if(!isChange||!currentUser)return;
+      if(!currentUser)return;
 
-      // Map changed table → which panels to reload
-      const topic=msg.topic||'';
-      const tableMap={
-        'appointments':   ['appointments','dashboard','doc-portal','asst-portal','portal'],
-        'sample_collection': ['samples','dashboard','asst-portal'],
-        'reports':        ['reports','portal','doc-portal'],
-        'billing':        ['billing','portal','asst-portal','dashboard'],
-        'patients':       ['patients','dashboard'],
-      };
-      let panels=[];
-      for(const [t,ps] of Object.entries(tableMap)){
-        if(topic.includes(t)){panels=ps;break;}
-      }
-      if(!panels.length)return;
+      // v2: postgres_changes come as event='postgres_changes' with payload.data
+      // v1 legacy: event='INSERT'/'UPDATE'/'DELETE'
+      let table=null;
 
-      // If the active panel is one that should refresh, reload it now
-      if(panels.includes(activePanel)){
-        loadPanel(activePanel);
+      if(msg.event==='postgres_changes' && msg.payload?.data){
+        table=msg.payload.data.table||msg.payload.data.source_table;
+      } else if(msg.event==='INSERT'||msg.event==='UPDATE'||msg.event==='DELETE'){
+        // legacy — extract table from topic e.g. "realtime:public:appointments"
+        const parts=(msg.topic||'').split(':');
+        table=parts[parts.length-1];
       }
+
+      if(!table)return;
+      const panels=TABLE_PANELS[table];
+      if(!panels)return;
+      if(panels.includes(activePanel)) loadPanel(activePanel);
     }catch(ex){}
   };
 
   ws.onerror=()=>{};
   ws.onclose=()=>{
-    if(_rt===ws){// only reconnect if this is still the active socket
-      clearInterval(ws._hb);
-      setTimeout(()=>{if(currentUser)startRealtime();},2000);
-    }
+    clearInterval(ws._hb);
+    if(_rt===ws && currentUser)
+      setTimeout(startRealtime, 2000);
   };
 }
 
 function stopRealtime(){
-  if(_rt){clearInterval(_rt._hb);try{_rt.close();}catch(e){}_rt=null;}
+  if(_rt){
+    const ws=_rt; _rt=null;
+    clearInterval(ws._hb);
+    try{ws.close();}catch(e){}
+  }
 }
 
 loadConfig();
