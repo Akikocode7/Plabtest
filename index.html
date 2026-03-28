@@ -1026,12 +1026,12 @@ async function loadReports(){
   }
   const rows=await sbGet('reports','report_id,patient_id,test_id,date,file_name,file_url,remark,patients(name),tests(name)',filters,'report_id.desc');
 
-  // Group by patient+date+file_url (if has file) OR just patient+date (if no file)
-  // This merges all same-day same-patient rows whether they have a file or not
+  // Group by patient+date+file_name (file_name is either real filename or a sessionId like 's1234567890')
+  // This correctly groups each upload batch together, separate from other batches
   const groups=[];
   const seen=new Map();
   for(const r of rows){
-    const key=r.patient_id+'|'+r.date+'|'+(r.file_url||'nofile');
+    const key=r.patient_id+'|'+r.date+'|'+(r.file_url||r.file_name||r.report_id);
     if(seen.has(key)){
       seen.get(key).tests.push(r.tests?.name||'—');
       seen.get(key)._ids.push(r.report_id);
@@ -1048,7 +1048,7 @@ async function loadReports(){
     <td>${g.patients?.name||'—'}</td>
     <td>${g.tests.join(', ')}</td>
     <td style="color:var(--text3)">${g.date}</td>
-    <td>${g.file_url?`<a href="${g.file_url}" target="_blank" class="report-file-link">📎 ${g.file_name||'View'}</a>`:g.file_name?`<span style="font-family:'DM Mono',monospace;font-size:12px;color:var(--text3)">${g.file_name}</span>`:'—'}</td>
+    <td>${g.file_url?`<a href="${g.file_url}" target="_blank" class="report-file-link">📎 ${g.file_name||'View'}</a>`:(!g.file_name||/^s\d+$/.test(g.file_name))?'—':`<span style="font-family:'DM Mono',monospace;font-size:12px;color:var(--text3)">${g.file_name}</span>`}</td>
     <td style="color:var(--text3);max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${g.remark||'—'}</td>
     <td>${canDelete?`<button class="btn btn-danger btn-xs" onclick="deleteReportGroup(${JSON.stringify(g._ids)})">Delete</button>`:'—'}</td>
   </tr>`).join(''):`<tr class="empty-row"><td colspan="7">No reports</td></tr>`;
@@ -1080,13 +1080,14 @@ async function saveReport(){
       bar.style.width='100%';
     }
     const remark=document.getElementById('m-r-remark').value.trim();
-    // Create one report row per selected test (same file shared across all)
+    // session_id ties this batch together for grouping — unique per upload click
+    const sessionId='s'+Date.now();
     for(const tid of tids){
       await sbPost('reports',{
         patient_id:parseInt(pid),
         test_id:tid,
         date,
-        file_name:fileName||'',
+        file_name:fileName||sessionId,  // use sessionId as file_name when no file — groups this batch
         file_url:fileUrl||null,
         remark:remark||null,
         managed_by:null
@@ -1195,7 +1196,7 @@ async function loadPatientPortal(){
         if(!reports.length)return '<tr class="empty-row"><td colspan="4">No reports yet</td></tr>';
         const seen=new Map(),grps=[];
         for(const r of reports){
-          const k=r.patient_id+'|'+r.date+'|'+(r.file_url||'nofile');
+          const k=r.patient_id+'|'+r.date+'|'+(r.file_url||r.file_name||r.report_id);
           if(seen.has(k)){seen.get(k).tests.push(r.tests?.name||'—');}
           else{const g={...r,tests:[r.tests?.name||'—']};seen.set(k,g);grps.push(g);}
         }
